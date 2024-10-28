@@ -1,10 +1,32 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const CustomForm = require('./components/CustomForm');
 const UserProfile = require('./components/UserProfile');
 const HomePage = require('./components/HomePage');
 const app = express();
 const port = 3000;
+
+// Proxy middleware setup
+const scannerProxy = createProxyMiddleware({
+    target: 'http://localhost:3002',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/scanner': '/' // Remove /scanner from the URL
+    }
+});
+
+const sharerProxy = createProxyMiddleware({
+    target: 'http://localhost:3001',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/sharer': '/' // Remove /sharer from the URL
+    }
+});
+
+// Use the proxy middleware for /scanner and /sharer paths
+app.use('/scanner', scannerProxy);
+app.use('/sharer', sharerProxy);
 
 // Mock user data (in a real app, this would come from a database)
 const mockUser = {

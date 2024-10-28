@@ -6,6 +6,8 @@ const HomePage = () => {
                 <ul>
                     <li><a href="/form" class="nav-link">Contact Form Demo</a></li>
                     <li><a href="/profile" class="nav-link">User Profile Demo</a></li>
+                    <li><a href="/scanner" class="nav-link">Receipt Scanner</a></li>
+                    <li><a href="/sharer" class="nav-link">File Sharer</a></li>
                     <li><a href="/todo" class="nav-link">Todo List Demo</a></li>
                     <li><a href="/counter" class="nav-link">Counter Demo</a></li>
                 </ul>
