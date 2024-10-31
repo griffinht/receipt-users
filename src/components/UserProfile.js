@@ -6,7 +6,12 @@ const UserProfile = (user) => {
                 <p><strong>User ID:</strong> ${user.id}</p>
                 <p><strong>Name:</strong> ${user.name}</p>
             </div>
-            <a href="/" class="back-link">Back to Form</a>
+            <div class="profile-actions">
+                <a href="/" class="back-link">Back to Home</a>
+                <form action="/logout" method="POST" class="logout-form">
+                    <button type="submit" class="logout-button">Logout</button>
+                </form>
+            </div>
         </div>
     `;
 };

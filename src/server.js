@@ -4,46 +4,149 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const CustomForm = require('./components/CustomForm');
 const UserProfile = require('./components/UserProfile');
 const HomePage = require('./components/HomePage');
+const LoginForm = require('./components/LoginForm');
+const session = require('express-session');
+
 const app = express();
-const port = 3000;
-
-// Proxy middleware setup
-const scannerProxy = createProxyMiddleware({
-    target: 'http://localhost:3002',
-    changeOrigin: true,
-    pathRewrite: {
-        '^/scanner': '/' // Remove /scanner from the URL
-    }
-});
-
-const sharerProxy = createProxyMiddleware({
-    target: 'http://localhost:3001',
-    changeOrigin: true,
-    pathRewrite: {
-        '^/sharer': '/' // Remove /sharer from the URL
-    }
-});
-
-// Use the proxy middleware for /scanner and /sharer paths
-app.use('/scanner', scannerProxy);
-app.use('/sharer', sharerProxy);
-
-// Mock user data (in a real app, this would come from a database)
 const mockUser = {
     id: "12345",
-    name: "John Doe"
+    name: "John Doe",
+    username: "admin",
+    password: "password" // In a real app, this would be hashed
 };
 
-// Middleware to parse form data
-app.use(bodyParser.urlencoded({ extended: true }));
+// Session middleware setup
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, domain: "localhost.com" } // Set to true if using HTTPS
+}));
 
-// Serve the CSS file
-app.get('/style.css', (req, res) => {
-    res.sendFile(__dirname + '/public/style.css');
+// Middleware to check if user is authenticated
+const requireAuth = (req, res, next) => {
+    if (!req.session.userId) {
+        return res.redirect('/login');
+    }
+    next();
+};
+
+// Middleware to check subdomain and proxy accordingly
+app.use((req, res, next) => {
+    const host = req.get('host');
+    
+    if (host.startsWith('analyzer.')) {
+        return createProxyMiddleware({
+            target: 'http://localhost:3000',
+            //target: 'https://httpbin.org',
+            changeOrigin: true,
+            on: {
+                proxyReq: (proxyReq) => {
+                    if (req.session.userId) {
+                        proxyReq.setHeader('user', req.session.userId);
+                    }
+                },
+            },
+        })(req, res, next);
+    }
+
+    if (host.startsWith('scanner.')) {
+        return createProxyMiddleware({
+            target: 'http://localhost:3002',
+            changeOrigin: true,
+            on: {
+                proxyReq: (proxyReq) => {
+                    if (req.session.userId) {
+                        proxyReq.setHeader('user', req.session.userId);
+                    }
+                },
+            },
+        })(req, res, next);
+    }
+    
+    if (host.startsWith('sharer.')) {
+        return createProxyMiddleware({
+            target: 'http://localhost:3001',
+            changeOrigin: true,
+            onProxyReq: (proxyReq) => {
+                if (req.session.userId) {
+                    proxyReq.setHeader('user', req.session.userId);
+                }
+            }
+        })(req, res, next);
+    }
+
+    next();
 });
 
-// Serve the home page
-app.get('/', (req, res) => {
+// Regular middleware for main app
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
+// Login route
+app.get('/login', (req, res) => {
+    // Redirect to home if already logged in
+    if (req.session.userId) {
+        return res.redirect('/');
+    }
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Login</title>
+            <link rel="stylesheet" href="/style.css">
+        </head>
+        <body>
+            ${LoginForm()}
+        </body>
+        </html>
+    `);
+});
+
+// Handle login submission
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    if (username === mockUser.username && password === mockUser.password) {
+        req.session.userId = mockUser.id;
+        req.session.user = {
+            id: mockUser.id,
+            name: mockUser.name
+        };
+        res.redirect('/');
+    } else {
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Login Failed</title>
+                <link rel="stylesheet" href="/style.css">
+            </head>
+            <body>
+                <div class="login-container">
+                    <h2>Login Failed</h2>
+                    <p>Invalid username or password</p>
+                    <a href="/login" class="back-link">Try Again</a>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+});
+
+// Add logout route
+app.post('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Error destroying session:', err);
+        }
+        res.redirect('/login');
+    });
+});
+
+// Protected routes
+app.get('/', requireAuth, (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -58,26 +161,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Contact form page
-app.get('/form', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Contact Form Demo</title>
-            <link rel="stylesheet" href="/style.css">
-        </head>
-        <body>
-            <h1>Contact Form Demo</h1>
-            ${CustomForm()}
-            <a href="/" class="back-link">Back to Home</a>
-        </body>
-        </html>
-    `);
-});
-
-// User profile page
-app.get('/profile', (req, res) => {
+app.get('/profile', requireAuth, (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -86,62 +170,13 @@ app.get('/profile', (req, res) => {
             <link rel="stylesheet" href="/style.css">
         </head>
         <body>
-            ${UserProfile(mockUser)}
+            ${UserProfile(req.session.user)}
         </body>
         </html>
     `);
 });
 
-// Todo list page (placeholder)
-app.get('/todo', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Todo List Demo</title>
-            <link rel="stylesheet" href="/style.css">
-        </head>
-        <body>
-            <h1>Todo List Demo</h1>
-            <p>Coming soon...</p>
-            <a href="/" class="back-link">Back to Home</a>
-        </body>
-        </html>
-    `);
-});
-
-// Counter page (placeholder)
-app.get('/counter', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Counter Demo</title>
-            <link rel="stylesheet" href="/style.css">
-        </head>
-        <body>
-            <h1>Counter Demo</h1>
-            <p>Coming soon...</p>
-            <a href="/" class="back-link">Back to Home</a>
-        </body>
-        </html>
-    `);
-});
-
-// Handle form submission
-app.post('/submit', (req, res) => {
-    const formData = req.body;
-    console.log('Form submission received:', formData);
-    res.send(`
-        <h1>Form Submitted Successfully!</h1>
-        <p>Name: ${formData.name}</p>
-        <p>Email: ${formData.email}</p>
-        <p>Message: ${formData.message}</p>
-        <a href="/" class="back-link">Back to Home</a>
-    `);
-});
-
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+app.listen(2999, () => {
+    console.log('Server running at:');
+    console.log('  http://localhost:2999');
 });
