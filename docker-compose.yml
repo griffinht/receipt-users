@@ -1,0 +1,6 @@
+services:
+  app:
+    build: .
+    network_mode: host
+#    ports:
+#      - "2999:2999"
